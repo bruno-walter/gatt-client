@@ -27,14 +27,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Pages
-        uses: actions/setup-pages@v3
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: gatt-client-public/
-      
+
       - name: Deploy to GitHub Pages
-        id: deployment
         uses: actions/deploy-pages@v4
