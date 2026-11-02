@@ -60,10 +60,25 @@ function updateConnectionState(connected) {
  */
 connectBtn.addEventListener('click', async () => {
   try {
+    // ESP32-C3 Mouse Jiggler services
+    const SERVICE_UUIDS = [
+      '00001800-0000-1000-8000-00805f9b34fb', // Generic Access
+      '00001801-0000-1000-8000-00805f9b34fb', // Generic Attribute
+      '0000180a-0000-1000-8000-00805f9b34fb', // Device Information
+      '0000180f-0000-1000-8000-00805f9b34fb', // Battery
+      '00001812-0000-1000-8000-00805f9b34fb', // HID
+      '7b0e0001-4f75-4b3b-9c2a-5e8a00000100', // Custom config service
+    ];
+
     device = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
-      optionalServices: [],
+      optionalServices: SERVICE_UUIDS,
     });
+
+    // Check if GATT is available
+    if (!device.gatt) {
+      throw new Error('GATT server not available on this device');
+    }
 
     const server = await device.gatt.connect();
 
