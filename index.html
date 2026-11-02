@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BLE GATT Client</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>" />
+</head>
+<body>
+  <header>
+    <h1>📡 BLE GATT Client</h1>
+    <p>A browser-based Bluetooth Low Energy GATT explorer powered by the Web Bluetooth API.</p>
+  </header>
+
+  <main>
+    <section id="connection" class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <button id="connectBtn" class="primary">Connect</button>
+        <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+      </div>
+      <div id="status" class="status">Not connected.</div>
+      <div id="deviceInfo" class="device-info hidden">
+        <div><strong>Device:</strong> <span id="deviceName">-</span></div>
+        <div><strong>Address:</strong> <span id="deviceAddress">-</span></div>
+        <div><strong>Connected:</strong> <span id="deviceConnected">no</span></div>
+      </div>
+    </section>
+
+    <section id="explorer" class="card hidden">
+      <h2>GATT Explorer</h2>
+      <div class="toolbar">
+        <button id="discoverBtn" class="secondary">Discover Services</button>
+        <button id="refreshBtn" class="secondary">Refresh</button>
+        <label class="toggle">
+          <input type="checkbox" id="autoNotify" checked />
+          <span>Auto-subscribe to notifications</span>
+        </label>
+      </div>
+      <div id="services" class="services"></div>
+    </section>
+
+    <section id="characteristic" class="card hidden">
+      <h2>Characteristic</h2>
+      <div id="charDetails" class="char-details"></div>
+    </section>
+
+    <section id="help" class="card">
+      <h2>How to use</h2>
+      <ol>
+        <li>Click <strong>Connect</strong> and choose your device (ESP32-C3 Mouse Jiggler or other BLE device).</li>
+        <li>Once connected, click <strong>Discover Services</strong> to browse the GATT database.</li>
+        <li>Click any characteristic to read its value, write to it, or subscribe to notifications.</li>
+      </ol>
+      <p class="note">Web Bluetooth is only available in Chrome, Edge, and Opera on desktop and Android. Connections are always user-initiated and require HTTPS or localhost.</p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
