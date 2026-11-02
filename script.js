@@ -35,7 +35,7 @@ function showToast(message, isError = false) {
  * Update the UI connection state.
  */
 function updateConnectionState(connected) {
-  connectedBtn.disabled = connected;
+  connectBtn.disabled = connected;
   disconnectBtn.disabled = !connected;
   statusEl.className = 'status' + (connected ? ' connected' : ' disconnected');
   statusEl.textContent = connected ? 'Connected!' : 'Not connected.';
