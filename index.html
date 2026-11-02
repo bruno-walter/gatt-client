@@ -1,64 +1,480 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BLE GATT Client</title>
-  <link rel="stylesheet" href="styles.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>ESP32 C3 Mouse Jiggler configuration</title>
+  <style>
+    :root {
+      font: 16px/1.5 system-ui, sans-serif;
+      color-scheme: light dark;
+    }
+    body {
+      box-sizing: border-box;
+      max-width: 36rem;
+      margin: 3rem auto;
+      padding: 0 1.25rem;
+    }
+    h1 { line-height: 1.2; }
+    label, input, button { display: block; }
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0.5rem 0 1rem;
+      padding: 0.7rem;
+      font: inherit;
+    }
+    input[type="checkbox"] {
+      display: inline-block;
+      width: auto;
+      margin: 0 0.5rem 0 0;
+      padding: 0;
+    }
+    .toggle { margin: 0 0 1rem; }
+    button {
+      padding: 0.65rem 1rem;
+      font: inherit;
+      cursor: pointer;
+    }
+    #status { min-height: 1.5rem; }
+    .hint { opacity: 0.8; }
+  </style>
 </head>
 <body>
-  <header>
-    <h1>📡 BLE GATT Client</h1>
-    <p>A browser-based Bluetooth Low Energy GATT explorer powered by the Web Bluetooth API.</p>
-  </header>
+  <h1>Mouse Jiggler settings</h1>
+  <p>Connect to the ESP32 over Bluetooth LE, then save the device name and the text the BOOT button types.</p>
 
-  <main>
-    <section id="connection" class="card">
-      <h2>Connection</h2>
-      <div class="row">
-        <button id="connectBtn" class="primary">Connect</button>
-        <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
-      </div>
-      <div id="status" class="status">Not connected.</div>
-      <div id="deviceInfo" class="device-info hidden">
-        <div><strong>Device:</strong> <span id="deviceName">-</span></div>
-        <div><strong>Address:</strong> <span id="deviceAddress">-</span></div>
-        <div><strong>Connected:</strong> <span id="deviceConnected">no</span></div>
-      </div>
-    </section>
+  <button id="connect" type="button">Connect to ESP32</button>
+  <form id="settings">
+    <label for="device-name">Device name (1 to 24 printable ASCII characters)</label>
+    <input id="device-name" name="device-name" type="text" maxlength="24"
+           autocomplete="off" spellcheck="false" disabled>
+    <label for="button-text">Button text (up to 128 printable ASCII characters)</label>
+    <input id="button-text" name="button-text" type="text" maxlength="128"
+           autocomplete="off" spellcheck="false" disabled>
+    <label class="toggle" for="jiggle">
+      <input id="jiggle" type="checkbox" disabled> Move the mouse every 30 seconds
+    </label>
+    <button id="save" type="submit" disabled>Save to ESP32</button>
+  </form>
+  <p id="status" role="status" aria-live="polite"></p>
+  <p class="hint">The device name is advertised over Bluetooth and shown in your operating system's Bluetooth list. The BOOT button types the text and presses Enter. Both values are stored on the ESP32 and are not sent to this website.</p>
 
-    <section id="explorer" class="card hidden">
-      <h2>GATT Explorer</h2>
-      <div class="toolbar">
-        <button id="discoverBtn" class="secondary">Discover Services</button>
-        <button id="refreshBtn" class="secondary">Refresh</button>
-        <label class="toggle">
-          <input type="checkbox" id="autoNotify" checked />
-          <span>Auto-subscribe to notifications</span>
-        </label>
-      </div>
-      <div id="services" class="services"></div>
-    </section>
+  <script>
+    "use strict";
 
-    <section id="characteristic" class="card hidden">
-      <h2>Characteristic</h2>
-      <div id="charDetails" class="char-details"></div>
-    </section>
+    const serviceUuid = "7b0e0001-4f75-4b3b-9c2a-5e8a00000100";
+    const buttonTextUuid = "7b0e0002-4f75-4b3b-9c2a-5e8a00000100";
+    const statusUuid = "7b0e0003-4f75-4b3b-9c2a-5e8a00000100";
+    const deviceNameUuid = "7b0e0004-4f75-4b3b-9c2a-5e8a00000100";
+    const jiggleUuid = "7b0e0005-4f75-4b3b-9c2a-5e8a00000100";
+    const authorizedDeviceKey = "esp32-c3-mouse-jiggler-device";
+    const autoconnectKey = "esp32-c3-mouse-jiggler-autoconnect";
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    const connectButton = document.querySelector("#connect");
+    const form = document.querySelector("#settings");
+    const nameInput = document.querySelector("#device-name");
+    const textInput = document.querySelector("#button-text");
+    const jiggleInput = document.querySelector("#jiggle");
+    const saveButton = document.querySelector("#save");
+    const status = document.querySelector("#status");
+    let nameCharacteristic;
+    let textCharacteristic;
+    let statusCharacteristic;
+    let jiggleCharacteristic;
+    let connectedDevice;
+    let disconnectPromise;
+    let preferDevicePicker = false;
+    let hasConnectedBefore = false;
+    const observedDevices = new WeakSet();
 
-    <section id="help" class="card">
-      <h2>How to use</h2>
-      <ol>
-        <li>Click <strong>Connect</strong> and choose your device (ESP32-C3 Mouse Jiggler or other BLE device).</li>
-        <li>Once connected, click <strong>Discover Services</strong> to browse the GATT database.</li>
-        <li>Click any characteristic to read its value, write to it, or subscribe to notifications.</li>
-      </ol>
-      <p class="note">Web Bluetooth is only available in Chrome, Edge, and Opera on desktop and Android. Connections are always user-initiated and require HTTPS or localhost.</p>
-    </section>
-  </main>
+    function showStatus(message, isError = false) {
+      status.textContent = message;
+      status.setAttribute("aria-live", isError ? "assertive" : "polite");
+    }
 
-  <div id="toast" class="toast hidden"></div>
+    function setConnected(connected) {
+      nameInput.disabled = !connected;
+      textInput.disabled = !connected;
+      jiggleInput.disabled = !connected;
+      saveButton.disabled = !connected;
+      connectButton.textContent = connected ? "Connected" : "Connect to ESP32";
+    }
 
-  <script src="script.js"></script>
+    async function withTimeout(operation, timeoutMs, message) {
+      let timeoutId;
+      try {
+        return await Promise.race([
+          operation,
+          new Promise((_, reject) => {
+            timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+          })
+        ]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    async function readAfterPairing(characteristic) {
+      const deadline = Date.now() + 10000;
+      let lastError;
+      while (Date.now() < deadline) {
+        try {
+          return await characteristic.readValue();
+        } catch (error) {
+          lastError = error;
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      throw lastError || new Error("Timed out waiting for BLE pairing.");
+    }
+
+    function delay(milliseconds) {
+      return new Promise(resolve => setTimeout(resolve, milliseconds));
+    }
+
+    async function disconnectDevice() {
+      if (disconnectPromise) {
+        return disconnectPromise;
+      }
+
+      const device = connectedDevice;
+      if (!device) {
+        return;
+      }
+
+      disconnectPromise = (async () => {
+        try {
+          if (device.gatt.connected) {
+            await Promise.race([
+              new Promise(resolve => {
+                device.addEventListener("gattserverdisconnected", resolve, { once: true });
+                try {
+                  device.gatt.disconnect();
+                } catch (error) {
+                  // Already disconnected, so there is nothing left to wait for.
+                  resolve();
+                }
+              }),
+              delay(3000)
+            ]);
+          }
+        } finally {
+          // Chrome needs a moment to tear the link down. Connecting again while
+          // the previous connection is still closing fails with a NetworkError,
+          // so wait until the device really reports itself as disconnected.
+          const deadline = Date.now() + 2000;
+          while (device.gatt.connected && Date.now() < deadline) {
+            await delay(50);
+          }
+
+          await delay(300);
+          nameCharacteristic = undefined;
+          textCharacteristic = undefined;
+          statusCharacteristic = undefined;
+          jiggleCharacteristic = undefined;
+        }
+      })().finally(() => {
+        disconnectPromise = undefined;
+      });
+
+      return disconnectPromise;
+    }
+
+    async function connectWithRetry(device) {
+      const attempts = 3;
+      let lastError;
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+          if (device.gatt.connected) {
+            return device.gatt;
+          }
+
+          return await withTimeout(
+            device.gatt.connect(),
+            15000,
+            "Timed out connecting to the ESP32."
+          );
+        } catch (error) {
+          lastError = error;
+          if (attempt < attempts) {
+            await delay(attempt * 750);
+          }
+        }
+      }
+
+      throw lastError;
+    }
+
+    // Chrome re-discovers the GATT database on every new connection, and the
+    // first discovery after a disconnect is much slower than one served from a
+    // warm host cache. Timing out and disconnecting throws that work away, so
+    // keep the link up and give discovery several generous attempts: a late
+    // answer still fills the cache that the next attempt reads from.
+    async function withRetries(description, operation, timeoutMs, attempts) {
+      let lastError;
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+          return await withTimeout(
+            operation(),
+            timeoutMs,
+            `Timed out ${description}.`
+          );
+        } catch (error) {
+          lastError = error;
+          if (attempt < attempts) {
+            showStatus(`${description} is taking longer than usual, retrying (${attempt + 1} of ${attempts})...`);
+            await delay(1000);
+          }
+        }
+      }
+      throw lastError;
+    }
+
+    function findService(server) {
+      return withRetries(
+        "discovering the configuration service",
+        () => server.getPrimaryService(serviceUuid),
+        20000,
+        2
+      );
+    }
+
+    function findCharacteristic(service, uuid, label) {
+      return withRetries(
+        `discovering the ${label} characteristic`,
+        () => service.getCharacteristic(uuid),
+        10000,
+        2
+      );
+    }
+
+    window.addEventListener("pagehide", () => {
+      if (connectedDevice?.gatt.connected) {
+        connectedDevice.gatt.disconnect();
+      }
+    });
+
+    connectButton.addEventListener("click", async () => {
+      if (connectedDevice?.gatt.connected) {
+        connectButton.disabled = true;
+        showStatus("Disconnecting from the ESP32...");
+        try {
+          await disconnectDevice();
+          showStatus("Disconnected. You can reconnect now.");
+        } catch (error) {
+          showStatus(`Could not disconnect cleanly: ${error.message || error}`, true);
+        } finally {
+          setConnected(false);
+          connectButton.disabled = false;
+        }
+        return;
+      }
+
+      if (!navigator.bluetooth) {
+        showStatus("Web Bluetooth is unavailable. Open this page in Chrome or Edge over HTTPS.", true);
+        return;
+      }
+
+      if (hasConnectedBefore) {
+        // Chrome cannot re-establish a GATT session on the same page after a
+        // disconnect: service discovery hangs until the page is fully reloaded.
+        // Reload automatically and resume connecting on the fresh page.
+        sessionStorage.setItem(autoconnectKey, "1");
+        location.reload();
+        return;
+      }
+
+      await connectToDevice();
+    });
+
+    async function connectToDevice(options) {
+      // requestDevice() only works from a user gesture, so an automatic
+      // reconnect must never call it.
+      const allowPicker = !options || options.allowPicker !== false;
+      connectButton.disabled = true;
+      let stage = "previously authorized device lookup";
+      let linkEstablished = false;
+      try {
+        if (disconnectPromise) {
+          await disconnectPromise;
+        }
+
+        let device;
+        if (!preferDevicePicker && typeof navigator.bluetooth.getDevices === "function") {
+          showStatus("Looking for a previously authorized ESP32...");
+          const authorizedDeviceId = localStorage.getItem(authorizedDeviceKey);
+          // Just after a reload the adapter may not have listed the device yet,
+          // so retry briefly when a previously authorized device is expected.
+          const attempts = authorizedDeviceId ? 6 : 1;
+          for (let attempt = 1; attempt <= attempts && !device; attempt += 1) {
+            const authorizedDevices = await navigator.bluetooth.getDevices();
+            device = authorizedDevices.find(
+              candidate => candidate.id === authorizedDeviceId
+            );
+            if (!device && attempt < attempts) {
+              await delay(400);
+            }
+          }
+        }
+
+        if (!device) {
+          if (!allowPicker) {
+            const needsClick = new Error("Waiting for the user to press Connect.");
+            needsClick.needsClick = true;
+            throw needsClick;
+          }
+
+          stage = "Bluetooth device selection";
+          showStatus("Choose the mouse jiggler in the Bluetooth picker.");
+          device = await navigator.bluetooth.requestDevice({
+            acceptAllDevices: true,
+            optionalServices: [serviceUuid]
+          });
+        }
+
+        localStorage.setItem(authorizedDeviceKey, device.id);
+        connectedDevice = device;
+        if (!observedDevices.has(device)) {
+          device.addEventListener("gattserverdisconnected", () => {
+            nameCharacteristic = undefined;
+            textCharacteristic = undefined;
+            statusCharacteristic = undefined;
+            jiggleCharacteristic = undefined;
+            setConnected(false);
+            showStatus("Disconnected.");
+          });
+          observedDevices.add(device);
+        }
+
+        stage = "GATT connection";
+        showStatus(hasConnectedBefore ? "Reconnecting to the ESP32..." : "Connecting to the ESP32...");
+        let server = await connectWithRetry(device);
+        linkEstablished = true;
+        if (hasConnectedBefore) {
+          // A link that was closed and reopened needs a moment before Chrome
+          // answers GATT requests again.
+          await delay(500);
+        }
+        stage = "configuration service discovery";
+        showStatus("Finding the text configuration service...");
+        let service;
+        try {
+          service = await findService(server);
+        } catch (error) {
+          // Chrome/Windows sometimes accept a re-connection but leave it unable
+          // to serve GATT. Drop it, wait for the link to fully tear down, and
+          // rebuild it the same way a page reload does.
+          showStatus("Service discovery stalled; re-establishing the link...");
+          await disconnectDevice();
+          await delay(1500);
+          server = await connectWithRetry(device);
+          await delay(500);
+          service = await findService(server);
+        }
+        stage = "characteristic discovery";
+        showStatus("Finding the configuration characteristics...");
+        nameCharacteristic = await findCharacteristic(service, deviceNameUuid, "device name");
+        textCharacteristic = await findCharacteristic(service, buttonTextUuid, "text");
+        statusCharacteristic = await findCharacteristic(service, statusUuid, "status");
+        jiggleCharacteristic = await findCharacteristic(service, jiggleUuid, "mouse movement");
+        stage = "encrypted text read";
+        showStatus("Pairing with the ESP32 and waiting for encryption...");
+        const name = await readAfterPairing(nameCharacteristic);
+        nameInput.value = decoder.decode(name);
+        const value = await readAfterPairing(textCharacteristic);
+        textInput.value = decoder.decode(value);
+        const jiggle = decoder.decode(await readAfterPairing(jiggleCharacteristic));
+        jiggleInput.checked = jiggle === "1";
+        preferDevicePicker = false;
+        hasConnectedBefore = true;
+        setConnected(true);
+        showStatus("Connected. The BLE link is encrypted.");
+      } catch (error) {
+        await disconnectDevice();
+        setConnected(false);
+        if (error && error.needsClick) {
+          // Automatic reconnects have no user gesture, so they cannot open the
+          // device picker; ask for one click instead of failing loudly.
+          showStatus("Press Connect to choose the mouse jiggler and finish connecting.", true);
+          return;
+        }
+        if (error && error.name === "SecurityError") {
+          showStatus("The browser needs a click to open the device picker. Press Connect again.", true);
+          return;
+        }
+        // When the link itself could not be opened, Chrome usually still holds
+        // the state of the closed connection for that device object, so retrying
+        // it keeps failing. Ask for the device again on the next click instead.
+        preferDevicePicker = linkEstablished || stage === "GATT connection";
+        const detail = error?.message
+          ? `${error.name || "Error"}: ${error.message}`
+          : "Bluetooth operation failed.";
+        showStatus(
+          `${stage} failed: ${detail} ` +
+            (preferDevicePicker
+              ? "Press Connect again and choose the mouse jiggler in the Bluetooth picker; that builds a fresh connection and does not need a page reload. "
+              : "Try connecting again without resetting the ESP32. ") +
+            "If discovery keeps timing out, remove the ESP32 from your system's Bluetooth pairing list and connect again.",
+          true
+        );
+      } finally {
+        connectButton.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = nameInput.value;
+      const text = textInput.value;
+      if (!/^[\x20-\x7e]{1,24}$/.test(name)) {
+        showStatus("Use 1 to 24 printable ASCII characters for the device name.", true);
+        return;
+      }
+
+      if (!/^[\x20-\x7e]{0,128}$/.test(text)) {
+        showStatus("Use only printable ASCII characters (up to 128).", true);
+        return;
+      }
+
+      saveButton.disabled = true;
+      showStatus("Saving...");
+      try {
+        await textCharacteristic.writeValueWithResponse(encoder.encode(text));
+        await nameCharacteristic.writeValueWithResponse(encoder.encode(name));
+        const jiggleValue = jiggleInput.checked ? "1" : "0";
+        await jiggleCharacteristic.writeValueWithResponse(encoder.encode(jiggleValue));
+        const appliedName = decoder.decode(await nameCharacteristic.readValue());
+        nameInput.value = appliedName;
+        if (appliedName !== name) {
+          showStatus("The ESP32 rejected the device name; use 1 to 24 printable ASCII characters.", true);
+          return;
+        }
+
+        const appliedJiggle = decoder.decode(await jiggleCharacteristic.readValue());
+        jiggleInput.checked = appliedJiggle === "1";
+        if (appliedJiggle !== jiggleValue) {
+          showStatus("The ESP32 rejected the mouse movement setting.", true);
+          return;
+        }
+
+        const savedStatus = await statusCharacteristic.readValue();
+        const message = decoder.decode(savedStatus);
+        showStatus(message, message !== "Saved");
+      } catch (error) {
+        showStatus(error.message || "Could not save the settings.", true);
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+    // Resume a connection that was interrupted by the automatic reload above.
+    // Connecting to an already-authorized device needs no user gesture.
+    if (sessionStorage.getItem(autoconnectKey) === "1") {
+      sessionStorage.removeItem(autoconnectKey);
+      setTimeout(() => connectToDevice({ allowPicker: false }), 250);
+    }
+  </script>
 </body>
 </html>
