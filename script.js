@@ -107,10 +107,22 @@ disconnectBtn.addEventListener('click', async () => {
 async function discoverServices(server) {
   try {
     const services = await server.getPrimaryServices();
+    console.log('Discovered', services.length, 'services');
     renderServices(services);
   } catch (err) {
-    console.error('Service discovery error:', err);
-    showToast('Failed to discover services', true);
+    console.error('getPrimaryServices error:', err);
+    showToast('Failed to discover services: ' + err.message, true);
+    
+    // Fallback: try device.gatt.primaryServices property
+    try {
+      console.log('Trying primaryServices property...');
+      const services = device.gatt.primaryServices || [];
+      console.log('Found', services.length, 'services via property');
+      renderServices(services);
+    } catch (err2) {
+      console.error('primaryServices error:', err2);
+      showToast('Service discovery failed: ' + err2.message, true);
+    }
   }
 }
 
