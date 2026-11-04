@@ -9,12 +9,36 @@
     :root {
       font: 16px/1.5 system-ui, sans-serif;
       color-scheme: light dark;
+      --bg: #ffffff;
+      --fg: #1a1a1a;
+      --surface: #f5f5f5;
+      --border: #cccccc;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --muted: #666666;
+      --error: #dc2626;
     }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f0f0f;
+        --fg: #e5e5e5;
+        --surface: #1a1a1a;
+        --border: #333333;
+        --accent: #3b82f6;
+        --accent-hover: #60a5fa;
+        --muted: #9ca3af;
+        --error: #f87171;
+      }
+    }
+
     body {
       box-sizing: border-box;
       max-width: 36rem;
       margin: 3rem auto;
       padding: 0 1.25rem;
+      background: var(--bg);
+      color: var(--fg);
     }
     h1 { line-height: 1.2; }
     label, input, button { display: block; }
@@ -24,21 +48,33 @@
       margin: 0.5rem 0 1rem;
       padding: 0.7rem;
       font: inherit;
+      background: var(--surface);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
     }
     input[type="checkbox"] {
       display: inline-block;
       width: auto;
       margin: 0 0.5rem 0 0;
       padding: 0;
+      accent-color: var(--accent);
     }
     .toggle { margin: 0 0 1rem; }
     button {
       padding: 0.65rem 1rem;
       font: inherit;
       cursor: pointer;
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      border-radius: 4px;
     }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     #status { min-height: 1.5rem; }
-    .hint { opacity: 0.8; }
+    .hint { color: var(--muted); }
+    .error { color: var(--error); }
   </style>
 </head>
 <body>
@@ -93,6 +129,7 @@
     function showStatus(message, isError = false) {
       status.textContent = message;
       status.setAttribute("aria-live", isError ? "assertive" : "polite");
+      status.classList.toggle("error", isError);
     }
 
     function setConnected(connected) {
