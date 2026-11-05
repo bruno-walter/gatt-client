@@ -94,6 +94,13 @@
     </label>
     <button id="save" type="submit" disabled>Save to ESP32</button>
   </form>
+
+  <section id="bonds" style="display:none">
+    <h2>Paired hosts</h2>
+    <p id="bond-list">Loading bonds...</p>
+    <button id="delete-all-bonds" type="button">Delete all bonds</button>
+  </section>
+
   <p id="status" role="status" aria-live="polite"></p>
   <p class="hint">The device name is advertised over Bluetooth and shown in your operating system's Bluetooth list. The BOOT button types the text and presses Enter. Both values are stored on the ESP32 and are not sent to this website.</p>
 
@@ -105,6 +112,7 @@
     const statusUuid = "7b0e0003-4f75-4b3b-9c2a-5e8a00000100";
     const deviceNameUuid = "7b0e0004-4f75-4b3b-9c2a-5e8a00000100";
     const jiggleUuid = "7b0e0005-4f75-4b3b-9c2a-5e8a00000100";
+    const bondConfigUuid = "7b0e0006-4f75-4b3b-9c2a-5e8a00000100";
     const authorizedDeviceKey = "esp32-c3-mouse-jiggler-device";
     const autoconnectKey = "esp32-c3-mouse-jiggler-autoconnect";
     const encoder = new TextEncoder();
@@ -120,6 +128,7 @@
     let textCharacteristic;
     let statusCharacteristic;
     let jiggleCharacteristic;
+    let bondConfigCharacteristic;
     let connectedDevice;
     let disconnectPromise;
     let preferDevicePicker = false;
@@ -137,6 +146,8 @@
       textInput.disabled = !connected;
       jiggleInput.disabled = !connected;
       saveButton.disabled = !connected;
+      const bondsSection = document.querySelector("#bonds");
+      bondsSection.style.display = connected ? "block" : "none";
       connectButton.textContent = connected ? "Connected" : "Connect to ESP32";
     }
 
@@ -417,6 +428,7 @@
         textCharacteristic = await findCharacteristic(service, buttonTextUuid, "text");
         statusCharacteristic = await findCharacteristic(service, statusUuid, "status");
         jiggleCharacteristic = await findCharacteristic(service, jiggleUuid, "mouse movement");
+        bondConfigCharacteristic = await findCharacteristic(service, bondConfigUuid, "bond config");
         stage = "encrypted text read";
         showStatus("Pairing with the ESP32 and waiting for encryption...");
         const name = await readAfterPairing(nameCharacteristic);
@@ -425,6 +437,7 @@
         textInput.value = decoder.decode(value);
         const jiggle = decoder.decode(await readAfterPairing(jiggleCharacteristic));
         jiggleInput.checked = jiggle === "1";
+        await loadBonds();
         preferDevicePicker = false;
         hasConnectedBefore = true;
         setConnected(true);
@@ -461,6 +474,82 @@
         connectButton.disabled = false;
       }
     }
+
+    async function loadBonds() {
+      const bondsSection = document.querySelector("#bonds");
+      const bondList = document.querySelector("#bond-list");
+      if (!bondConfigCharacteristic) {
+        bondsSection.style.display = "none";
+        return;
+      }
+      bondsSection.style.display = "block";
+      try {
+        const value = await bondConfigCharacteristic.readValue();
+        const text = decoder.decode(value);
+        const lines = text.trim().split("\n").filter(line => line.length > 0);
+        if (lines.length === 0 || (lines.length === 1 && lines[0] === "No bonds stored.")) {
+          bondList.innerHTML = "<em>No bonds stored.</em>";
+          return;
+        }
+        bondList.innerHTML = "";
+        for (let i = 0; i < lines.length; i += 1) {
+          const match = lines[i].match(/^(\d+):\s+(.+)$/);
+          if (!match) continue;
+          const index = match[1];
+          const address = match[2];
+          const row = document.createElement("div");
+          row.style.display = "flex";
+          row.style.alignItems = "center";
+          row.style.gap = "0.5rem";
+          row.style.marginBottom = "0.5rem";
+          const label = document.createElement("span");
+          label.textContent = `Bond ${index}: ${address}`;
+          label.style.flex = "1";
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = "Delete";
+          btn.style.padding = "0.35rem 0.75rem";
+          btn.style.fontSize = "0.85rem";
+          btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            btn.textContent = "Deleting...";
+            try {
+              await bondConfigCharacteristic.writeValueWithResponse(encoder.encode(`delete-${index}`));
+              await loadBonds();
+              showStatus(`Deleted bond ${index}.`);
+            } catch (error) {
+              showStatus(`Failed to delete bond ${index}: ${error.message || error}`, true);
+              btn.disabled = false;
+              btn.textContent = "Delete";
+            }
+          });
+          row.appendChild(label);
+          row.appendChild(btn);
+          bondList.appendChild(row);
+        }
+      } catch (error) {
+        bondList.textContent = `Failed to load bonds: ${error.message || error}`;
+        bondList.className = "error";
+      }
+    }
+
+    document.querySelector("#delete-all-bonds").addEventListener("click", async () => {
+      if (!confirm("Delete all bonded hosts? They will need to pair again.")) {
+        return;
+      }
+      const btn = document.querySelector("#delete-all-bonds");
+      btn.disabled = true;
+      btn.textContent = "Deleting...";
+      try {
+        await bondConfigCharacteristic.writeValueWithResponse(encoder.encode("delete-all"));
+        await loadBonds();
+        showStatus("All bonds deleted.");
+      } catch (error) {
+        showStatus(`Failed to delete all bonds: ${error.message || error}`, true);
+        btn.disabled = false;
+        btn.textContent = "Delete all bonds";
+      }
+    });
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
