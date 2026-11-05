@@ -507,16 +507,26 @@
         bondList.innerHTML = "";
         for (let i = 0; i < lines.length; i += 1) {
           // Format: "index: nickname (address)"
-          const match = lines[i].match(/^(\d+):\s+(.+?)\s*\(([^)]+)\)\s*$/);
+          const match = lines[i].match(/^(\d+):\s+(.+?)\s*\(([^)]+)\)\s*(?:\[connected\])?\s*$/);
           if (!match) continue;
           const index = match[1];
           const nickname = match[2];
           const address = match[3];
+          const isConnected = lines[i].includes("[connected]");
           const row = document.createElement("div");
           row.style.display = "flex";
           row.style.alignItems = "center";
           row.style.gap = "0.5rem";
           row.style.marginBottom = "0.5rem";
+
+          // Connection status indicator
+          const statusDot = document.createElement("span");
+          statusDot.style.width = "8px";
+          statusDot.style.height = "8px";
+          statusDot.style.borderRadius = "50%";
+          statusDot.style.background = isConnected ? "var(--fg)" : "var(--muted)";
+          statusDot.style.flexShrink = "0";
+          statusDot.title = isConnected ? "Connected" : "Disconnected";
 
           // Nickname label + edit input
           const labelWrap = document.createElement("div");
@@ -555,6 +565,13 @@
           addrSpan.style.color = "var(--muted)";
           labelWrap.appendChild(addrSpan);
 
+          const statusText = document.createElement("span");
+          statusText.textContent = isConnected ? " • Connected" : " • Disconnected";
+          statusText.style.fontSize = "0.8rem";
+          statusText.style.color = isConnected ? "var(--fg)" : "var(--muted)";
+          statusText.style.marginLeft = "0.5rem";
+          labelWrap.appendChild(statusText);
+
           const delBtn = document.createElement("button");
           delBtn.type = "button";
           delBtn.textContent = "Delete";
@@ -579,6 +596,7 @@
           targetOpt.textContent = nickname || address;
           targetSelect.appendChild(targetOpt);
 
+          row.appendChild(statusDot);
           row.appendChild(labelWrap);
           row.appendChild(delBtn);
           bondList.appendChild(row);
