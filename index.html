@@ -97,6 +97,11 @@
 
   <section id="bonds" style="display:none">
     <h2>Paired hosts</h2>
+    <div id="bond-target" style="margin-bottom:1rem">
+      <label for="button-text-target">Button text target:</label>
+      <select id="button-text-target" style="margin-left:0.5rem"></select>
+      <span id="target-hint" style="font-size:0.85rem;color:var(--muted);margin-left:0.5rem">(broadcast to all)</span>
+    </div>
     <p id="bond-list">Loading bonds...</p>
     <button id="delete-all-bonds" type="button">Delete all bonds</button>
   </section>
@@ -478,6 +483,8 @@
     async function loadBonds() {
       const bondsSection = document.querySelector("#bonds");
       const bondList = document.querySelector("#bond-list");
+      const targetSelect = document.querySelector("#button-text-target");
+      const targetHint = document.querySelector("#target-hint");
       if (!bondConfigCharacteristic) {
         bondsSection.style.display = "none";
         return;
@@ -489,42 +496,91 @@
         const lines = text.trim().split("\n").filter(line => line.length > 0);
         if (lines.length === 0 || (lines.length === 1 && lines[0] === "No bonds stored.")) {
           bondList.innerHTML = "<em>No bonds stored.</em>";
+          targetSelect.innerHTML = '<option value="-1">Broadcast to all connected hosts</option>';
+          targetSelect.disabled = true;
+          targetHint.textContent = "(no bonds available)";
           return;
         }
+        targetSelect.disabled = false;
+        targetHint.textContent = "";
+        targetSelect.innerHTML = '<option value="-1">Broadcast to all connected hosts</option>';
         bondList.innerHTML = "";
         for (let i = 0; i < lines.length; i += 1) {
-          const match = lines[i].match(/^(\d+):\s+(.+)$/);
+          // Format: "index: nickname (address)"
+          const match = lines[i].match(/^(\d+):\s+(.+?)\s*\(([^)]+)\)\s*$/);
           if (!match) continue;
           const index = match[1];
-          const address = match[2];
+          const nickname = match[2];
+          const address = match[3];
           const row = document.createElement("div");
           row.style.display = "flex";
           row.style.alignItems = "center";
           row.style.gap = "0.5rem";
           row.style.marginBottom = "0.5rem";
+
+          // Nickname label + edit input
+          const labelWrap = document.createElement("div");
+          labelWrap.style.display = "flex";
+          labelWrap.style.alignItems = "center";
+          labelWrap.style.gap = "0.3rem";
+          labelWrap.style.flex = "1";
           const label = document.createElement("span");
-          label.textContent = `Bond ${index}: ${address}`;
-          label.style.flex = "1";
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.textContent = "Delete";
-          btn.style.padding = "0.35rem 0.75rem";
-          btn.style.fontSize = "0.85rem";
-          btn.addEventListener("click", async () => {
-            btn.disabled = true;
-            btn.textContent = "Deleting...";
+          label.textContent = `Bond ${index}: `;
+          label.style.fontSize = "0.9rem";
+          const nickInput = document.createElement("input");
+          nickInput.type = "text";
+          nickInput.value = nickname;
+          nickInput.maxLength = "32";
+          nickInput.style.width = "120px";
+          nickInput.style.fontSize = "0.85rem";
+          nickInput.addEventListener("blur", async () => {
+            const newName = nickInput.value.trim();
+            if (newName !== nickname) {
+              try {
+                await bondConfigCharacteristic.writeValueWithResponse(encoder.encode(`set-name-${index}-${newName}`));
+                await loadBonds();
+                showStatus(`Renamed bond ${index}.`);
+              } catch (error) {
+                showStatus(`Failed to rename bond: ${error.message || error}`, true);
+                nickInput.value = nickname;
+              }
+            }
+          });
+          labelWrap.appendChild(label);
+          labelWrap.appendChild(nickInput);
+
+          const addrSpan = document.createElement("span");
+          addrSpan.textContent = `(${address})`;
+          addrSpan.style.fontSize = "0.8rem";
+          addrSpan.style.color = "var(--muted)";
+          labelWrap.appendChild(addrSpan);
+
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.textContent = "Delete";
+          delBtn.style.padding = "0.35rem 0.75rem";
+          delBtn.style.fontSize = "0.85rem";
+          delBtn.addEventListener("click", async () => {
+            delBtn.disabled = true;
+            delBtn.textContent = "Deleting...";
             try {
               await bondConfigCharacteristic.writeValueWithResponse(encoder.encode(`delete-${index}`));
               await loadBonds();
               showStatus(`Deleted bond ${index}.`);
             } catch (error) {
               showStatus(`Failed to delete bond ${index}: ${error.message || error}`, true);
-              btn.disabled = false;
-              btn.textContent = "Delete";
+              delBtn.disabled = false;
+              delBtn.textContent = "Delete";
             }
           });
-          row.appendChild(label);
-          row.appendChild(btn);
+
+          const targetOpt = document.createElement("option");
+          targetOpt.value = index;
+          targetOpt.textContent = nickname || address;
+          targetSelect.appendChild(targetOpt);
+
+          row.appendChild(labelWrap);
+          row.appendChild(delBtn);
           bondList.appendChild(row);
         }
       } catch (error) {
@@ -532,6 +588,17 @@
         bondList.className = "error";
       }
     }
+
+    document.querySelector("#button-text-target").addEventListener("change", async () => {
+      const select = document.querySelector("#button-text-target");
+      const index = parseInt(select.value, 10);
+      try {
+        await bondConfigCharacteristic.writeValueWithResponse(encoder.encode(`set-target-${index}`));
+        showStatus(`Button-text target set to ${select.selectedOptions[0].text}.`);
+      } catch (error) {
+        showStatus(`Failed to set target: ${error.message || error}`, true);
+      }
+    });
 
     document.querySelector("#delete-all-bonds").addEventListener("click", async () => {
       if (!confirm("Delete all bonded hosts? They will need to pair again.")) {
