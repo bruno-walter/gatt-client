@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>ESP32 C3 Mouse Jiggler configuration</title>
+  <title>AwayKey configuration</title>
   <style>
     :root {
       font: 16px/1.5 system-ui, sans-serif;
@@ -78,7 +78,7 @@
   </style>
 </head>
 <body>
-  <h1>Mouse Jiggler settings</h1>
+  <h1>AwayKey settings</h1>
   <p>Connect to the ESP32 over Bluetooth LE, then save the device name and the text the BOOT button types.</p>
 
   <button id="connect" type="button">Connect to ESP32</button>
@@ -381,7 +381,7 @@
           }
 
           stage = "Bluetooth device selection";
-          showStatus("Choose the mouse jiggler in the Bluetooth picker.");
+          showStatus("Choose AwayKey in the Bluetooth picker.");
           device = await navigator.bluetooth.requestDevice({
             acceptAllDevices: true,
             optionalServices: [serviceUuid]
@@ -453,7 +453,7 @@
         if (error && error.needsClick) {
           // Automatic reconnects have no user gesture, so they cannot open the
           // device picker; ask for one click instead of failing loudly.
-          showStatus("Press Connect to choose the mouse jiggler and finish connecting.", true);
+          showStatus("Press Connect to choose AwayKey and finish connecting.", true);
           return;
         }
         if (error && error.name === "SecurityError") {
@@ -470,7 +470,7 @@
         showStatus(
           `${stage} failed: ${detail} ` +
             (preferDevicePicker
-              ? "Press Connect again and choose the mouse jiggler in the Bluetooth picker; that builds a fresh connection and does not need a page reload. "
+              ? "Press Connect again and choose AwayKey in the Bluetooth picker; that builds a fresh connection and does not need a page reload. "
               : "Try connecting again without resetting the ESP32. ") +
             "If discovery keeps timing out, remove the ESP32 from your system's Bluetooth pairing list and connect again.",
           true
