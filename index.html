@@ -79,9 +79,9 @@
 </head>
 <body>
   <h1>AwayKey settings</h1>
-  <p>Connect to the ESP32 over Bluetooth LE, then save the device name and the text the BOOT button types.</p>
+  <p>Connect to AwayKey over Bluetooth LE, then save the device name and the text the BOOT button types.</p>
 
-  <button id="connect" type="button">Connect to ESP32</button>
+  <button id="connect" type="button">Connect to AwayKey</button>
   <form id="settings">
     <label for="device-name">Device name (1 to 24 printable ASCII characters)</label>
     <input id="device-name" name="device-name" type="text" maxlength="24"
@@ -92,7 +92,7 @@
     <label class="toggle" for="jiggle">
       <input id="jiggle" type="checkbox" disabled> Move the mouse every 30 seconds
     </label>
-    <button id="save" type="submit" disabled>Save to ESP32</button>
+    <button id="save" type="submit" disabled>Save to AwayKey</button>
   </form>
 
   <section id="bonds" style="display:none">
@@ -107,7 +107,7 @@
   </section>
 
   <p id="status" role="status" aria-live="polite"></p>
-  <p class="hint">The device name is advertised over Bluetooth and shown in your operating system's Bluetooth list. The BOOT button types the text and presses Enter. Both values are stored on the ESP32 and are not sent to this website.</p>
+  <p class="hint">The device name is advertised over Bluetooth and shown in your operating system's Bluetooth list. The BOOT button types the text and presses Enter. Both values are stored on AwayKey and are not sent to this website.</p>
 
   <script>
     "use strict";
@@ -118,8 +118,8 @@
     const deviceNameUuid = "7b0e0004-4f75-4b3b-9c2a-5e8a00000100";
     const jiggleUuid = "7b0e0005-4f75-4b3b-9c2a-5e8a00000100";
     const bondConfigUuid = "7b0e0006-4f75-4b3b-9c2a-5e8a00000100";
-    const authorizedDeviceKey = "esp32-c3-mouse-jiggler-device";
-    const autoconnectKey = "esp32-c3-mouse-jiggler-autoconnect";
+    const authorizedDeviceKey = "awaykey-device";
+    const autoconnectKey = "awaykey-autoconnect";
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     const connectButton = document.querySelector("#connect");
@@ -153,7 +153,7 @@
       saveButton.disabled = !connected;
       const bondsSection = document.querySelector("#bonds");
       bondsSection.style.display = connected ? "block" : "none";
-      connectButton.textContent = connected ? "Connected" : "Connect to ESP32";
+      connectButton.textContent = connected ? "Connected" : "Connect to AwayKey";
     }
 
     async function withTimeout(operation, timeoutMs, message) {
@@ -248,7 +248,7 @@
           return await withTimeout(
             device.gatt.connect(),
             15000,
-            "Timed out connecting to the ESP32."
+            "Timed out connecting to AwayKey."
           );
         } catch (error) {
           lastError = error;
@@ -313,7 +313,7 @@
     connectButton.addEventListener("click", async () => {
       if (connectedDevice?.gatt.connected) {
         connectButton.disabled = true;
-        showStatus("Disconnecting from the ESP32...");
+        showStatus("Disconnecting from AwayKey...");
         try {
           await disconnectDevice();
           showStatus("Disconnected. You can reconnect now.");
@@ -357,7 +357,7 @@
 
         let device;
         if (!preferDevicePicker && typeof navigator.bluetooth.getDevices === "function") {
-          showStatus("Looking for a previously authorized ESP32...");
+          showStatus("Looking for a previously authorized AwayKey...");
           const authorizedDeviceId = localStorage.getItem(authorizedDeviceKey);
           // Just after a reload the adapter may not have listed the device yet,
           // so retry briefly when a previously authorized device is expected.
@@ -403,7 +403,7 @@
         }
 
         stage = "GATT connection";
-        showStatus(hasConnectedBefore ? "Reconnecting to the ESP32..." : "Connecting to the ESP32...");
+        showStatus(hasConnectedBefore ? "Reconnecting to AwayKey..." : "Connecting to AwayKey...");
         let server = await connectWithRetry(device);
         linkEstablished = true;
         if (hasConnectedBefore) {
@@ -435,7 +435,7 @@
         jiggleCharacteristic = await findCharacteristic(service, jiggleUuid, "mouse movement");
         bondConfigCharacteristic = await findCharacteristic(service, bondConfigUuid, "bond config");
         stage = "encrypted text read";
-        showStatus("Pairing with the ESP32 and waiting for encryption...");
+        showStatus("Pairing with AwayKey and waiting for encryption...");
         const name = await readAfterPairing(nameCharacteristic);
         nameInput.value = decoder.decode(name);
         const value = await readAfterPairing(textCharacteristic);
@@ -471,8 +471,8 @@
           `${stage} failed: ${detail} ` +
             (preferDevicePicker
               ? "Press Connect again and choose AwayKey in the Bluetooth picker; that builds a fresh connection and does not need a page reload. "
-              : "Try connecting again without resetting the ESP32. ") +
-            "If discovery keeps timing out, remove the ESP32 from your system's Bluetooth pairing list and connect again.",
+              : "Try connecting again without resetting AwayKey. ") +
+            "If discovery keeps timing out, remove AwayKey from your system's Bluetooth pairing list and connect again.",
           true
         );
       } finally {
@@ -660,14 +660,14 @@
         const appliedName = decoder.decode(await nameCharacteristic.readValue());
         nameInput.value = appliedName;
         if (appliedName !== name) {
-          showStatus("The ESP32 rejected the device name; use 1 to 24 printable ASCII characters.", true);
+          showStatus("AwayKey rejected the device name; use 1 to 24 printable ASCII characters.", true);
           return;
         }
 
         const appliedJiggle = decoder.decode(await jiggleCharacteristic.readValue());
         jiggleInput.checked = appliedJiggle === "1";
         if (appliedJiggle !== jiggleValue) {
-          showStatus("The ESP32 rejected the mouse movement setting.", true);
+          showStatus("AwayKey rejected the mouse movement setting.", true);
           return;
         }
 
