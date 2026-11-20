@@ -131,15 +131,11 @@
     <button id="save-finger-macro" type="button">Save macro</button>
 
     <div style="margin-top:1rem">
-      <label for="enroll-finger-id">Enroll finger ID (1-10)</label>
-      <input id="enroll-finger-id" type="number" min="1" max="10" placeholder="1">
-      <button id="enroll-finger" type="button">Enroll finger</button>
+      <button id="enroll-finger" type="button">Enroll selected finger</button>
     </div>
 
     <div style="margin-top:1rem">
-      <label for="delete-finger-id">Delete finger ID (1-10)</label>
-      <input id="delete-finger-id" type="number" min="1" max="10" placeholder="1">
-      <button id="delete-finger" type="button">Delete finger</button>
+      <button id="delete-finger" type="button">Delete selected finger</button>
     </div>
 
     <button id="delete-all-fingerprints" type="button">Delete all fingerprints</button>
@@ -716,12 +712,8 @@
     });
 
     document.querySelector("#enroll-finger").addEventListener("click", async () => {
-      const input = document.querySelector("#enroll-finger-id");
-      const fingerId = parseInt(input.value, 10);
-      if (!fingerId || fingerId < 1 || fingerId > 10) {
-        showStatus("Enter a finger ID between 1 and 10.", true);
-        return;
-      }
+      const select = document.querySelector("#finger-id");
+      const fingerId = parseInt(select.value, 10);
       const btn = document.querySelector("#enroll-finger");
       btn.disabled = true;
       btn.textContent = "Enrolling...";
@@ -733,17 +725,13 @@
         showStatus(`Failed to queue enrollment: ${error.message || error}`, true);
       } finally {
         btn.disabled = false;
-        btn.textContent = "Enroll finger";
+        btn.textContent = "Enroll selected finger";
       }
     });
 
     document.querySelector("#delete-finger").addEventListener("click", async () => {
-      const input = document.querySelector("#delete-finger-id");
-      const fingerId = parseInt(input.value, 10);
-      if (!fingerId || fingerId < 1 || fingerId > 10) {
-        showStatus("Enter a finger ID between 1 and 10.", true);
-        return;
-      }
+      const select = document.querySelector("#finger-id");
+      const fingerId = parseInt(select.value, 10);
       const btn = document.querySelector("#delete-finger");
       btn.disabled = true;
       btn.textContent = "Deleting...";
@@ -754,7 +742,7 @@
         showStatus(`Failed to queue delete: ${error.message || error}`, true);
       } finally {
         btn.disabled = false;
-        btn.textContent = "Delete finger";
+        btn.textContent = "Delete selected finger";
       }
     });
 
