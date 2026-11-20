@@ -707,7 +707,6 @@
       btn.disabled = true;
       try {
         await fingerprintWriteCharacteristic.writeValueWithResponse(encoder.encode(`${fingerId}:${macro}`));
-        input.value = "";
         showStatus(`Macro saved for finger ${fingerId}.`);
       } catch (error) {
         showStatus(`Failed to save macro: ${error.message || error}`, true);
