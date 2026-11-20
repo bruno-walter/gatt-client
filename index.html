@@ -187,6 +187,14 @@
       status.classList.toggle("error", isError);
     }
 
+    function loadSelectedMacro() {
+      const select = document.querySelector("#finger-id");
+      const fingerId = parseInt(select.value, 10);
+      const input = document.querySelector("#finger-macro");
+      const saved = localStorage.getItem(`fp-macro-${fingerId}`);
+      input.value = saved || "";
+    }
+
     function setConnected(connected) {
       nameInput.disabled = !connected;
       textInput.disabled = !connected;
@@ -197,6 +205,9 @@
       const fingerprintsSection = document.querySelector("#fingerprints");
       fingerprintsSection.style.display = connected ? "block" : "none";
       connectButton.textContent = connected ? "Connected" : "Connect to AwayKey";
+      if (connected) {
+        loadSelectedMacro();
+      }
     }
 
     async function withTimeout(operation, timeoutMs, message) {
