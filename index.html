@@ -703,12 +703,21 @@
       btn.disabled = true;
       try {
         await fingerprintWriteCharacteristic.writeValueWithResponse(encoder.encode(`${fingerId}:${macro}`));
+        localStorage.setItem(`fp-macro-${fingerId}`, macro);
         showStatus(`Macro saved for finger ${fingerId}.`);
       } catch (error) {
         showStatus(`Failed to save macro: ${error.message || error}`, true);
       } finally {
         btn.disabled = false;
       }
+    });
+
+    document.querySelector("#finger-id").addEventListener("change", () => {
+      const select = document.querySelector("#finger-id");
+      const fingerId = parseInt(select.value, 10);
+      const input = document.querySelector("#finger-macro");
+      const saved = localStorage.getItem(`fp-macro-${fingerId}`);
+      input.value = saved || "";
     });
 
     document.querySelector("#enroll-finger").addEventListener("click", async () => {
