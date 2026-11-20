@@ -111,34 +111,36 @@
     <p>Assign a text macro to each enrolled finger. When a matching finger is
     placed on the sensor, the macro is typed over Bluetooth HID keyboard.</p>
 
-    <label for="finger-id">Finger ID (1-10)</label>
-    <select id="finger-id">
-      <option value="1">Finger 1</option>
-      <option value="2">Finger 2</option>
-      <option value="3">Finger 3</option>
-      <option value="4">Finger 4</option>
-      <option value="5">Finger 5</option>
-      <option value="6">Finger 6</option>
-      <option value="7">Finger 7</option>
-      <option value="8">Finger 8</option>
-      <option value="9">Finger 9</option>
-      <option value="10">Finger 10</option>
-    </select>
+    <div style="border:1px solid var(--border);border-radius:6px;padding:1rem 1rem 1rem 1rem;margin-top:1rem">
+      <label for="finger-id" style="font-weight:600">Finger</label>
+      <select id="finger-id" style="font-size:1.3rem;padding:0.5rem">
+        <option value="1">Finger 1</option>
+        <option value="2">Finger 2</option>
+        <option value="3">Finger 3</option>
+        <option value="4">Finger 4</option>
+        <option value="5">Finger 5</option>
+        <option value="6">Finger 6</option>
+        <option value="7">Finger 7</option>
+        <option value="8">Finger 8</option>
+        <option value="9">Finger 9</option>
+        <option value="10">Finger 10</option>
+      </select>
 
-    <label for="finger-macro">Macro text (up to 64 printable ASCII characters)</label>
-    <input id="finger-macro" name="finger-macro" type="text" maxlength="64"
-           autocomplete="off" spellcheck="false" placeholder="e.g. Hello World">
-    <button id="save-finger-macro" type="button">Save macro</button>
+      <label for="finger-macro">Macro text (up to 64 printable ASCII characters)</label>
+      <input id="finger-macro" name="finger-macro" type="text" maxlength="64"
+             autocomplete="off" spellcheck="false" placeholder="e.g. Hello World">
+      <button id="save-finger-macro" type="button">Save macro</button>
 
-    <div style="margin-top:1rem">
-      <button id="enroll-finger" type="button">Enroll selected finger</button>
+      <div style="margin-top:1rem">
+        <button id="enroll-finger" type="button">Enroll selected finger</button>
+      </div>
+
+      <div style="margin-top:1rem">
+        <button id="delete-finger" type="button">Delete selected finger</button>
+      </div>
     </div>
 
-    <div style="margin-top:1rem">
-      <button id="delete-finger" type="button">Delete selected finger</button>
-    </div>
-
-    <button id="delete-all-fingerprints" type="button">Delete all fingerprints</button>
+    <button id="delete-all-fingerprints" type="button" style="margin-top:1rem">Delete all fingerprints</button>
   </section>
 
   <p id="status" role="status" aria-live="polite"></p>
@@ -723,10 +725,23 @@
       }
     });
 
-    document.querySelector("#finger-id").addEventListener("change", () => {
+    document.querySelector("#finger-id").addEventListener("change", async () => {
       const select = document.querySelector("#finger-id");
       const fingerId = parseInt(select.value, 10);
       const input = document.querySelector("#finger-macro");
+
+      // Try to read the macro from the device first.
+      if (fingerprintWriteCharacteristic) {
+        try {
+          // Write just the finger ID to trigger a "get macro" response.
+          await fingerprintWriteCharacteristic.writeValueWithResponse(encoder.encode(`${fingerId}`));
+          const value = await fingerprintWriteCharacteristic.readValue();
+          input.value = decoder.decode(value);
+          return;
+        } catch (error) {
+          // Fall back to localStorage if device read fails.
+        }
+      }
       const saved = localStorage.getItem(`fp-macro-${fingerId}`);
       input.value = saved || "";
     });
