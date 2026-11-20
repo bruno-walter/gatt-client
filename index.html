@@ -106,6 +106,45 @@
     <button id="delete-all-bonds" type="button">Delete all bonds</button>
   </section>
 
+  <section id="fingerprints" style="display:none">
+    <h2>Fingerprint macros</h2>
+    <p>Assign a text macro to each enrolled finger. When a matching finger is
+    placed on the sensor, the macro is typed over Bluetooth HID keyboard.</p>
+
+    <label for="finger-id">Finger ID (1-10)</label>
+    <select id="finger-id">
+      <option value="1">Finger 1</option>
+      <option value="2">Finger 2</option>
+      <option value="3">Finger 3</option>
+      <option value="4">Finger 4</option>
+      <option value="5">Finger 5</option>
+      <option value="6">Finger 6</option>
+      <option value="7">Finger 7</option>
+      <option value="8">Finger 8</option>
+      <option value="9">Finger 9</option>
+      <option value="10">Finger 10</option>
+    </select>
+
+    <label for="finger-macro">Macro text (up to 64 printable ASCII characters)</label>
+    <input id="finger-macro" name="finger-macro" type="text" maxlength="64"
+           autocomplete="off" spellcheck="false" placeholder="e.g. Hello World">
+    <button id="save-finger-macro" type="button">Save macro</button>
+
+    <div style="margin-top:1rem">
+      <label for="enroll-finger-id">Enroll finger ID (1-10)</label>
+      <input id="enroll-finger-id" type="number" min="1" max="10" placeholder="1">
+      <button id="enroll-finger" type="button">Enroll finger</button>
+    </div>
+
+    <div style="margin-top:1rem">
+      <label for="delete-finger-id">Delete finger ID (1-10)</label>
+      <input id="delete-finger-id" type="number" min="1" max="10" placeholder="1">
+      <button id="delete-finger" type="button">Delete finger</button>
+    </div>
+
+    <button id="delete-all-fingerprints" type="button">Delete all fingerprints</button>
+  </section>
+
   <p id="status" role="status" aria-live="polite"></p>
   <p class="hint">The device name is advertised over Bluetooth and shown in your operating system's Bluetooth list. The BOOT button types the text and presses Enter. Both values are stored on AwayKey and are not sent to this website.</p>
 
@@ -118,6 +157,9 @@
     const deviceNameUuid = "7b0e0004-4f75-4b3b-9c2a-5e8a00000100";
     const jiggleUuid = "7b0e0005-4f75-4b3b-9c2a-5e8a00000100";
     const bondConfigUuid = "7b0e0006-4f75-4b3b-9c2a-5e8a00000100";
+    const fingerprintWriteUuid = "7b0e0008-4f75-4b3b-9c2a-5e8a00000100";
+    const fingerprintStatusUuid = "7b0e0009-4f75-4b3b-9c2a-5e8a00000100";
+    const fingerprintEnrollUuid = "7b0e000a-4f75-4b3b-9c2a-5e8a00000100";
     const authorizedDeviceKey = "awaykey-device";
     const autoconnectKey = "awaykey-autoconnect";
     const encoder = new TextEncoder();
@@ -134,6 +176,9 @@
     let statusCharacteristic;
     let jiggleCharacteristic;
     let bondConfigCharacteristic;
+    let fingerprintWriteCharacteristic;
+    let fingerprintStatusCharacteristic;
+    let fingerprintEnrollCharacteristic;
     let connectedDevice;
     let disconnectPromise;
     let preferDevicePicker = false;
@@ -153,6 +198,8 @@
       saveButton.disabled = !connected;
       const bondsSection = document.querySelector("#bonds");
       bondsSection.style.display = connected ? "block" : "none";
+      const fingerprintsSection = document.querySelector("#fingerprints");
+      fingerprintsSection.style.display = connected ? "block" : "none";
       connectButton.textContent = connected ? "Connected" : "Connect to AwayKey";
     }
 
@@ -228,6 +275,9 @@
           textCharacteristic = undefined;
           statusCharacteristic = undefined;
           jiggleCharacteristic = undefined;
+          fingerprintWriteCharacteristic = undefined;
+          fingerprintStatusCharacteristic = undefined;
+          fingerprintEnrollCharacteristic = undefined;
         }
       })().finally(() => {
         disconnectPromise = undefined;
@@ -396,6 +446,9 @@
             textCharacteristic = undefined;
             statusCharacteristic = undefined;
             jiggleCharacteristic = undefined;
+            fingerprintWriteCharacteristic = undefined;
+            fingerprintStatusCharacteristic = undefined;
+            fingerprintEnrollCharacteristic = undefined;
             setConnected(false);
             showStatus("Disconnected.");
           });
@@ -434,6 +487,9 @@
         statusCharacteristic = await findCharacteristic(service, statusUuid, "status");
         jiggleCharacteristic = await findCharacteristic(service, jiggleUuid, "mouse movement");
         bondConfigCharacteristic = await findCharacteristic(service, bondConfigUuid, "bond config");
+        fingerprintWriteCharacteristic = await findCharacteristic(service, fingerprintWriteUuid, "fingerprint write");
+        fingerprintStatusCharacteristic = await findCharacteristic(service, fingerprintStatusUuid, "fingerprint status");
+        fingerprintEnrollCharacteristic = await findCharacteristic(service, fingerprintEnrollUuid, "fingerprint enroll");
         stage = "encrypted text read";
         showStatus("Pairing with AwayKey and waiting for encryption...");
         const name = await readAfterPairing(nameCharacteristic);
@@ -443,6 +499,8 @@
         const jiggle = decoder.decode(await readAfterPairing(jiggleCharacteristic));
         jiggleInput.checked = jiggle === "1";
         await loadBonds();
+        const fpStatus = await readAfterPairing(fingerprintStatusCharacteristic);
+        showStatus(`Connected. ${decoder.decode(fpStatus)}`);
         preferDevicePicker = false;
         hasConnectedBefore = true;
         setConnected(true);
@@ -633,6 +691,89 @@
         showStatus(`Failed to delete all bonds: ${error.message || error}`, true);
         btn.disabled = false;
         btn.textContent = "Delete all bonds";
+      }
+    });
+
+    document.querySelector("#save-finger-macro").addEventListener("click", async () => {
+      const select = document.querySelector("#finger-id");
+      const fingerId = parseInt(select.value, 10);
+      const input = document.querySelector("#finger-macro");
+      const macro = input.value;
+      if (!/^[\x20-\x7e]{0,64}$/.test(macro)) {
+        showStatus("Use only printable ASCII characters (up to 64).", true);
+        return;
+      }
+      const btn = document.querySelector("#save-finger-macro");
+      btn.disabled = true;
+      try {
+        await fingerprintWriteCharacteristic.writeValueWithResponse(encoder.encode(`${fingerId}:${macro}`));
+        input.value = "";
+        showStatus(`Macro saved for finger ${fingerId}.`);
+      } catch (error) {
+        showStatus(`Failed to save macro: ${error.message || error}`, true);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.querySelector("#enroll-finger").addEventListener("click", async () => {
+      const input = document.querySelector("#enroll-finger-id");
+      const fingerId = parseInt(input.value, 10);
+      if (!fingerId || fingerId < 1 || fingerId > 10) {
+        showStatus("Enter a finger ID between 1 and 10.", true);
+        return;
+      }
+      const btn = document.querySelector("#enroll-finger");
+      btn.disabled = true;
+      btn.textContent = "Enrolling...";
+      showStatus("Place your finger on the sensor when prompted.");
+      try {
+        await fingerprintEnrollCharacteristic.writeValueWithResponse(encoder.encode(`enroll-${fingerId}`));
+        showStatus(`Enrollment for finger ${fingerId} queued.`);
+      } catch (error) {
+        showStatus(`Failed to queue enrollment: ${error.message || error}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Enroll finger";
+      }
+    });
+
+    document.querySelector("#delete-finger").addEventListener("click", async () => {
+      const input = document.querySelector("#delete-finger-id");
+      const fingerId = parseInt(input.value, 10);
+      if (!fingerId || fingerId < 1 || fingerId > 10) {
+        showStatus("Enter a finger ID between 1 and 10.", true);
+        return;
+      }
+      const btn = document.querySelector("#delete-finger");
+      btn.disabled = true;
+      btn.textContent = "Deleting...";
+      try {
+        await fingerprintEnrollCharacteristic.writeValueWithResponse(encoder.encode(`delete-${fingerId}`));
+        showStatus(`Delete queued for finger ${fingerId}.`);
+      } catch (error) {
+        showStatus(`Failed to queue delete: ${error.message || error}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Delete finger";
+      }
+    });
+
+    document.querySelector("#delete-all-fingerprints").addEventListener("click", async () => {
+      if (!confirm("Delete all fingerprint templates? They will need to be re-enrolled.")) {
+        return;
+      }
+      const btn = document.querySelector("#delete-all-fingerprints");
+      btn.disabled = true;
+      btn.textContent = "Deleting...";
+      try {
+        await fingerprintEnrollCharacteristic.writeValueWithResponse(encoder.encode("delete-all"));
+        showStatus("Delete all fingerprints queued.");
+      } catch (error) {
+        showStatus(`Failed to queue delete all: ${error.message || error}`, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Delete all fingerprints";
       }
     });
 
