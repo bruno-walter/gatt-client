@@ -725,23 +725,10 @@
       }
     });
 
-    document.querySelector("#finger-id").addEventListener("change", async () => {
+    document.querySelector("#finger-id").addEventListener("change", () => {
       const select = document.querySelector("#finger-id");
       const fingerId = parseInt(select.value, 10);
       const input = document.querySelector("#finger-macro");
-
-      // Try to read the macro from the device first.
-      if (fingerprintWriteCharacteristic) {
-        try {
-          // Write just the finger ID to trigger a "get macro" response.
-          await fingerprintWriteCharacteristic.writeValueWithResponse(encoder.encode(`${fingerId}`));
-          const value = await fingerprintWriteCharacteristic.readValue();
-          input.value = decoder.decode(value);
-          return;
-        } catch (error) {
-          // Fall back to localStorage if device read fails.
-        }
-      }
       const saved = localStorage.getItem(`fp-macro-${fingerId}`);
       input.value = saved || "";
     });
