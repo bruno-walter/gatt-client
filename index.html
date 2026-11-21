@@ -158,6 +158,7 @@
     const fingerprintWriteUuid = "7b0e0008-4f75-4b3b-9c2a-5e8a00000100";
     const fingerprintStatusUuid = "7b0e0009-4f75-4b3b-9c2a-5e8a00000100";
     const fingerprintEnrollUuid = "7b0e000a-4f75-4b3b-9c2a-5e8a00000100";
+    const fingerprintMacrosReadUuid = "7b0e000b-4f75-4b3b-9c2a-5e8a00000100";
     const authorizedDeviceKey = "awaykey-device";
     const autoconnectKey = "awaykey-autoconnect";
     const encoder = new TextEncoder();
@@ -177,6 +178,7 @@
     let fingerprintWriteCharacteristic;
     let fingerprintStatusCharacteristic;
     let fingerprintEnrollCharacteristic;
+    let fingerprintMacrosReadCharacteristic;
     let connectedDevice;
     let disconnectPromise;
     let preferDevicePicker = false;
@@ -195,6 +197,20 @@
       const input = document.querySelector("#finger-macro");
       const saved = localStorage.getItem(`fp-macro-${fingerId}`);
       input.value = saved || "";
+    }
+
+    function parseAndStoreMacros(text) {
+      if (!text) return;
+      const pairs = text.split("|");
+      for (const pair of pairs) {
+        const colon = pair.indexOf(":");
+        if (colon <= 0) continue;
+        const fingerId = parseInt(pair.substring(0, colon), 10);
+        const macro = pair.substring(colon + 1);
+        if (fingerId >= 1 && fingerId <= 10) {
+          localStorage.setItem(`fp-macro-${fingerId}`, macro);
+        }
+      }
     }
 
     function setConnected(connected) {
@@ -287,6 +303,7 @@
           fingerprintWriteCharacteristic = undefined;
           fingerprintStatusCharacteristic = undefined;
           fingerprintEnrollCharacteristic = undefined;
+          fingerprintMacrosReadCharacteristic = undefined;
         }
       })().finally(() => {
         disconnectPromise = undefined;
@@ -458,6 +475,7 @@
             fingerprintWriteCharacteristic = undefined;
             fingerprintStatusCharacteristic = undefined;
             fingerprintEnrollCharacteristic = undefined;
+          fingerprintMacrosReadCharacteristic = undefined;
             setConnected(false);
             showStatus("Disconnected.");
           });
@@ -499,6 +517,7 @@
         fingerprintWriteCharacteristic = await findCharacteristic(service, fingerprintWriteUuid, "fingerprint write");
         fingerprintStatusCharacteristic = await findCharacteristic(service, fingerprintStatusUuid, "fingerprint status");
         fingerprintEnrollCharacteristic = await findCharacteristic(service, fingerprintEnrollUuid, "fingerprint enroll");
+        fingerprintMacrosReadCharacteristic = await findCharacteristic(service, fingerprintMacrosReadUuid, "fingerprint macros");
         stage = "encrypted text read";
         showStatus("Pairing with AwayKey and waiting for encryption...");
         const name = await readAfterPairing(nameCharacteristic);
@@ -508,6 +527,14 @@
         const jiggle = decoder.decode(await readAfterPairing(jiggleCharacteristic));
         jiggleInput.checked = jiggle === "1";
         await loadBonds();
+        // Read all fingerprint macros from the device and populate localStorage.
+        try {
+          const fpMacros = await readAfterPairing(fingerprintMacrosReadCharacteristic);
+          parseAndStoreMacros(decoder.decode(fpMacros));
+          loadSelectedMacro();
+        } catch (error) {
+          // Non-fatal — fingerprint macros read failed.
+        }
         const fpStatus = await readAfterPairing(fingerprintStatusCharacteristic);
         showStatus(`Connected. ${decoder.decode(fpStatus)}`);
         preferDevicePicker = false;
